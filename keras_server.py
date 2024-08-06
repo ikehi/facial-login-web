@@ -8,9 +8,7 @@
 #	python simple_request.py
 
 # import the necessary packages
-
-import keras 
-from keras import *
+import keras
 from keras.models import load_model
 import numpy as np
 import tensorflow as tf
@@ -18,6 +16,7 @@ import os
 from collections import defaultdict
 from sqlalchemy.orm import sessionmaker
 from tabledef import *
+
 engine = create_engine('sqlite:///login_db.db', echo=True)
 
 import pickle
@@ -39,30 +38,31 @@ model = None
 user_db = None
 IMAGE_SAVE_PATH = './images'
 
-
 # for detecting the face boundary
 face_cascade = cv2.CascadeClassifier('haarcascades/haarcascade_frontalface_default.xml')
 
+
 # custom loss function for model
-def triplet_loss(y_true, y_pred, alpha = 0.2):
+def triplet_loss(y_true, y_pred, alpha=0.2):
     anchor, positive, negative = y_pred[0], y_pred[1], y_pred[2]
     # triplet formula components
-    pos_dist = tf.reduce_sum( tf.square(tf.subtract(y_pred[0], y_pred[1])) )
-    neg_dist = tf.reduce_sum( tf.square(tf.subtract(y_pred[0], y_pred[2])) )
+    pos_dist = tf.reduce_sum(tf.square(tf.subtract(y_pred[0], y_pred[1])))
+    neg_dist = tf.reduce_sum(tf.square(tf.subtract(y_pred[0], y_pred[2])))
     basic_loss = pos_dist - neg_dist + alpha
-    
+
     loss = tf.maximum(basic_loss, 0.0)
-   
+
     return loss
 
+
 # for checking whether a face is there in image or not
-# returns true if a face is found and also saves a cropped bounded face picture 
+# returns true if a face is found and also saves a cropped bounded face picture
 # otherwise returns false
 def face_present(image_path):
     img = cv2.imread(image_path, -1)
     save_loc = 'saved_image/new.jpg'
     face_present = False
-    
+
     # Our operations on the frame come here
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # detect face
@@ -70,8 +70,8 @@ def face_present(image_path):
 
     for (x, y, w, h) in faces:
         # required region for the face
-        roi_color = img[y-90:y+h+70, x-50:x+w+50]
-        
+        roi_color = img[y - 90:y + h + 70, x - 50:x + w + 50]
+
         # crop to 96 X 96, required by the model
         roi_color = cv2.resize(roi_color, (96, 96))
         # save the detected face
@@ -81,17 +81,17 @@ def face_present(image_path):
 
         # Just for visualization purpose
         # draw a rectangle bounding the face and save it
-        roi = img[y-90:y+h+70, x-50:x+w+50]
-        cv2.rectangle(img, (x-10, y-70),
-                    (x+w+20, y+h+40), (15, 175, 61), 4)
+        roi = img[y - 90:y + h + 70, x - 50:x + w + 50]
+        cv2.rectangle(img, (x - 10, y - 70),
+                      (x + w + 20, y + h + 40), (15, 175, 61), 4)
         cv2.imwrite('static/saved_images/bounded.jpg', img)
     return face_present
 
 
-# for loading the facenet trained model 
+# for loading the facenet trained model
 def load_FRmodel():
     global model
-    model = load_model('models/model.h5', custom_objects={'triplet_loss': triplet_loss})
+    model = load_model('simple_model.h5', custom_objects={'triplet_loss': triplet_loss})
     model.summary()
 
 
@@ -107,7 +107,6 @@ def ini_user_database():
         # we use a dict for keeping track of mapping of each person with his/her face encoding
         user_db = defaultdict(dict)
     return user_db
-
 
 
 # for checking if the given input face is of a registered user or not
@@ -135,7 +134,6 @@ def face_recognition(encoding, database, model, threshold=0.6):
     return min_dist, identity, authenticate
 
 
-
 # for adding user face
 def add_face():
     data = {"face_present": False}
@@ -145,7 +143,7 @@ def add_face():
     valid_face = face_present('saved_image/new.jpg')
     # add user only if there is a face inside the picture
     if valid_face:
-        # create image encoding 
+        # create image encoding
         encoding = img_to_encoding('saved_image/new.jpg', model)
         # save the output for sending as json
         data['face_present'] = True
@@ -153,7 +151,7 @@ def add_face():
         # save the output for sending as json
         data['face_present'] = False
         print('No subject detected !')
-    
+
     return data, encoding
 
 
@@ -186,7 +184,7 @@ def authenticate_user():
     #making a session
     Session = sessionmaker(bind=engine)
     s = Session()
-    query = s.query(User).filter(User.username.in_([POST_USERNAME]), User.password.in_([POST_PASSWORD]) )
+    query = s.query(User).filter(User.username.in_([POST_USERNAME]), User.password.in_([POST_PASSWORD]))
     result = query.first()
     # if the user is logged in
     if result:
@@ -216,9 +214,9 @@ def sign_up():
 def signup_user():
     #declaring the engine
     engine = create_engine('sqlite:///login_db.db', echo=True)
-    
+
     # whether user registration was successful or not
-    user_status = {'registration': False, 'face_present': False, 'duplicate':False}
+    user_status = {'registration': False, 'face_present': False, 'duplicate': False}
 
     # ensure an image was properly uploaded to our endpoint
     if flask.request.method == "POST":
@@ -258,7 +256,7 @@ def signup_user():
 
                 # save the user_db dict
                 with open('database/user_dict.pickle', 'wb') as handle:
-                    pickle.dump(user_db, handle,protocol=pickle.HIGHEST_PROTOCOL)
+                    pickle.dump(user_db, handle, protocol=pickle.HIGHEST_PROTOCOL)
                 print('User ' + POST_USERNAME + ' added successfully')
 
                 # adding the user to data base
@@ -273,30 +271,29 @@ def signup_user():
                 #return dashboard()
         else:
             user_status['duplicate'] = True
-    
+
     #return sign_up()
     return flask.jsonify(user_status)
-   
 
 
-# predict function 
+# predict function
 @app.route("/predict", methods=["POST"])
 def predict():
-    # this will contain the 
+    # this will contain the
     data = {"success": False}
     # for keeping track of authentication status
     data['authenticate'] = False
     # ensure an image was properly uploaded to our endpoint
     if flask.request.method == "POST":
         if flask.request.files.get("image"):
-            
+
             # read the image in PIL format
             image = flask.request.files["image"].read()
             image = np.array(Image.open(io.BytesIO(image)))
-            
+
             # save the image on server side
             cv2.imwrite('saved_image/new.jpg', cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-            
+
             # CHECK FOR FACE IN THE IMAGE
             valid_face = False
             valid_face = face_present('saved_image/new.jpg')
@@ -306,8 +303,8 @@ def predict():
                 # find image encoding and see if the image is of a registered user or not
                 encoding = img_to_encoding('saved_image/new.jpg', model)
                 min_dist, identity, authenticate = face_recognition(
-                                                    encoding, user_db, model, threshold=0.9)
-                
+                    encoding, user_db, model, threshold=0.9)
+
                 # save the output for sending as json
                 data["min_dist"] = str(min_dist)
                 data['email'] = identity
@@ -326,7 +323,7 @@ def predict():
                 data['face_present'] = False
                 data['authenticate'] = False
                 print('No subject detected !')
-            
+
             # indicate that the request was a success
             data["success"] = True
 
@@ -343,11 +340,39 @@ def predict():
     return flask.jsonify(data)
 
 
+# Function to generate video frames
+def generate_frames():
+    camera = cv2.VideoCapture(0)
+    while True:
+        success, frame = camera.read()
+        if not success:
+            break
+        else:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+            for (x, y, w, h) in faces:
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+
+            ret, buffer = cv2.imencode('.jpg', frame)
+            frame = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+
+
+# Add the new route for video streaming
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+# Add a route to display the video streaming page
+@app.route('/video')
+def video():
+    return render_template('video.html')
+
 
 # first load the model and then start the server
 if __name__ == "__main__":
-    
-
     print("** Starting Flask server.........Please wait until the server starts ")
     print('Loading the Neural Network......\n')
     load_FRmodel()
